@@ -4,11 +4,13 @@ How to compose subagents: the recommended pattern, packaged prompt shortcuts, sc
 
 ## Recommended orchestration pattern
 
-Use orchestration as parent-agent guidance, not as a runtime workflow mode. For implementation work, the recommended loop is:
+Use orchestration as parent-agent guidance, not as a runtime workflow mode. For authorized delegated implementation, compose only the stages that help:
 
 ```text
-clarify → scout → worker → fresh reviewers → worker
+clarify if needed → scout for broad discovery → worker → independent review when warranted → fix if findings require it
 ```
+
+Keep a small, well-scoped task with its current owner. A scout should reduce the parent's exploration context, not make the parent repeat the same search; a reviewer should supply independent evidence, not be a mandatory extra pass. Prefer one bounded child over a scripted workflow when no sequencing or fanout is needed. Compare parent-context savings, child usage, latency, and handoff quality on representative tasks before making a stage habitual.
 
 Packaged `worker` defaults to fresh context so implementation starts from its assigned brief instead of the parent's unfinished conversation. Packaged `oracle` and `advisor` default to forked context; if the parent has no persisted session file or current leaf yet, that implicit default falls back to `fresh`. Explicit `context`, `context: "profile"`, and global `defaultSubagentContext` still override these profile defaults.
 

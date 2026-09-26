@@ -90,7 +90,7 @@ The package includes `/council` and `council-mode`, plus documented model-based
 | See running work | "Show active async runs." or "Show the subagent fleet." |
 | Check setup | "Check whether subagents are configured correctly." |
 
-For implementation work, the recommended loop is `clarify → scout → worker → fresh reviewers → worker`. Packaged prompt shortcuts like `/parallel-review` and `/review-loop` make these patterns repeatable — see [Workflows](https://github.com/nicobailon/pi-subagents/blob/main/docs/workflows.md).
+For delegated implementation, use only the stages that earn their overhead: clarify if needed, scout for broad discovery, worker for a bounded change, independent review when warranted, and a fix pass only for actionable findings. Keep small tasks direct. Packaged prompt shortcuts like `/parallel-review` and `/review-loop` make optional review patterns repeatable — see [Workflows](https://github.com/nicobailon/pi-subagents/blob/main/docs/workflows.md).
 
 ## Where running work shows up
 
