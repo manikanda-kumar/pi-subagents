@@ -32,7 +32,7 @@ function parentToolEnv(agentDir?: string): NodeJS.ProcessEnv {
 
 describe("registered subagent tool description", () => {
 	it("keeps the operator authority gate visible in every description mode", () => {
-		const authorityGate = "Direct parent execution is the default. Invoke subagents only when delegation is authorized by the operator's current request or applicable user/project instructions; task size, complexity, risk, tool-call count, or recipe fit do not independently authorize delegation.";
+		const authorityGate = "Direct parent execution is the default. Invoke subagents only when the current request or applicable user/project instructions authorize delegation; complexity, risk or recipe fit alone do not.";
 		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagents-tool-desc-authority-"));
 		const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagents-tool-desc-agent-"));
 		fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
@@ -70,13 +70,18 @@ describe("registered subagent tool description", () => {
 
 	it("keeps execution, authority, evidence and recovery contracts in every built-in mode", () => {
 		for (const description of [DEFAULT_SUBAGENT_TOOL_DESCRIPTION, FULL_SUBAGENT_TOOL_DESCRIPTION, COMPACT_SUBAGENT_TOOL_DESCRIPTION]) {
+			assert.match(description, /^For an authorized multi-child workflow: call \{action:"list",capabilities:true\}, then \{workflowScript:"const r=await runs\.all\(\[\{key:'a',agent:'scout',task:'\.\.\.'\}, \{key:'b',agent:'scout',task:'\.\.\.'\}\]\);return r\.map\(x=>x\.output\)",async:true\}/);
+			assert.match(description, /runs\.all takes launch objects, not runs\.run promises.*Explicitly pass async:true/);
+			assert.match(description, /Delegate one child with \{agent,task\?\}, e\.g\. \{agent:'scout',cwd:'\/repo',task:'\.\.\.',async:true\}/);
+			assert.match(description, /send broad search to a fresh scout with exact cwd.*Verify its primary line with file-scoped grep.*do not repeat bulk search/);
+			assert.match(description, /Browser and other tools are capabilities, not agents/);
 			for (const contract of [
 				/one child with \{agent,task\?\}/,
 				/exactly one of \{workflowScript,args\?\}, \{workflowScriptPath,args\?\} or \{workflow,args\}/,
 				/agent\/task exclude workflow inputs; task excludes action.*agent may target management actions/,
 				/workflowScriptPath loads from request cwd before sandbox/,
 				/Raw-script sandboxes add deeply frozen args/,
-				/raw-script args persist as evidence, so never include secrets/,
+				/Raw-script args persist as evidence, so never include secrets/,
 				/action is management\/control; validate accepts either script without launching/,
 				/action:"list",capabilities:true.*executable, non-disabled.*runner.available === true/,
 				/Passive PATH\/PATHEXT\/X_OK.*not authentication\/version\/launch proof/,

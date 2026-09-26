@@ -17,6 +17,81 @@ Each launch resolves one model. Provider errors, including HTTP 429 responses, a
 
 Use `model: "inherit"` in agent frontmatter or `agentOverrides.<name>.model` to select the current parent session model explicitly.
 
+## Local GLM-5.3-Flash on vLLM
+
+Pi owns the OpenAI-compatible connection; pi-subagents inherits the **selected parent model** for its builtins. No extension-specific provider or model fork is needed. On the vLLM host, enable automatic tool calls and reasoning parsing for GLM-5.3-Flash (the [vLLM recipe](https://recipes.vllm.ai/zai-org/GLM-5.3-Flash) uses `--enable-auto-tool-choice --tool-call-parser glm47 --reasoning-parser glm47`). Check that your NVFP4 checkpoint, vLLM build, and GPU support those flags; the recipe's NVFP4 variant requires Blackwell. The client and every detached child must be able to reach the same server URL.
+
+In `~/.pi/agent/models.json`, register the **exact served model ID** returned by that server's `/v1/models` (or set `--served-model-name` to the ID you choose). Replace the URL, ID, and token limit below with your deployment's actual values; 130K here is an example, not the hosted Go model's advertised 1M context. Pi's `contextWindow` must not exceed vLLM's configured `--max-model-len`:
+
+```json
+{
+  "providers": {
+    "local-glm": {
+      "baseUrl": "http://YOUR_VLLM_HOST:8000/v1",
+      "api": "openai-completions",
+      "apiKey": "local",
+      "models": [{
+        "id": "YOUR_SERVED_MODEL_ID",
+        "name": "GLM-5.3-Flash NVFP4 (local)",
+        "reasoning": true,
+        "input": ["text"],
+        "contextWindow": 130000,
+        "maxTokens": 16384,
+        "compat": {
+          "supportsDeveloperRole": false,
+          "supportsStore": false,
+          "maxTokensField": "max_tokens"
+        },
+        "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+      }]
+    }
+  }
+}
+```
+
+If vLLM requires an API token, use `"apiKey": "$VLLM_API_KEY"` and provide that environment variable to **both** the parent and detached runner; never put the token in the JSON file. Test a normal tool call and a response after the tool returns before trusting long sessions. If your server rejects `reasoning_effort`, add `"supportsReasoningEffort": false` under `compat`; this disables Pi's effort field, not the checkpoint's own reasoning. Avoid pinning a Go model ID in subagent settings: `opencode-go/glm-5.3-flash` was useful for an external smoke test, but the local server can expose a different ID.
+
+The [official GLM-5 guidance](https://github.com/zai-org/GLM-5#note) says Flash accepts `reasoning_effort` values `low`, `high`, and `max` (default `max`); other values fall back to `max`. The bundled `scout` asks for low and `worker` for high; check the **resolved** child model/effort in run status before assuming the local server honored them. For chat sessions the model authors advise `clear_thinking=true`; if your vLLM build supports `chat_template_kwargs`, test `"samplingParams": {"chat_template_kwargs": {"clear_thinking": true}}` as a model setting against multi-turn tool use before enabling it for a long job. The [official ZCode implementation](https://github.com/zai-org/ZCode) lists Flash as a model and pins child selection on resume, but its subagent routing is generic—not a model-specific mode to copy into Pi.
+
+For long local jobs, start with these **optional** values, then tune them against measured queue and prefill latency. Set `httpIdleTimeoutMs` in Pi's `~/.pi/agent/settings.json` (or project `.pi/settings.json`), and the other values in `~/.pi/agent/extensions/subagent/config.json`:
+
+Pi settings:
+
+```json
+{ "httpIdleTimeoutMs": 900000 }
+```
+
+pi-subagents config:
+
+```json
+{ "timeoutMs": 14400000, "checkpointBeforeDeadlineMs": 600000, "globalConcurrencyLimit": 2 }
+```
+
+The four-hour `timeoutMs` replaces the 30-minute default for a plain child; `checkpointBeforeDeadlineMs` asks an async single child to report state before the deadline, but is best-effort and cannot interrupt an active tool. A scripted async workflow has no default top-level deadline; put a suitable deadline on each child or an explicit workflow deadline when needed. Keep concurrency within your vLLM KV-cache capacity (two is a starting point, not a benchmark). Avoid hard tool-call caps for writers. Give each worker a bounded, verifiable slice, persist progress at stage boundaries, use mission/run artifacts to recover after parent compaction, and inspect or resume the **same** run rather than launching a second writer when it is slow. See [timeouts](configuration.md#timeoutms), [workflows](workflows.md), and [missions](missions.md).
+
+Check `pi --list-models YOUR_SERVED_MODEL_ID`, then launch Pi with `--provider local-glm --model YOUR_SERVED_MODEL_ID`. Ask it to run one read-only scout child, then a two-child `runs.all` workflow; verify each child reports the local provider/model in `/subagents-fleet` or `subagent({action:"status",id:"..."})`, returns an actual file read, and reaches a terminal receipt. The Go smoke test can validate the Pi tool protocol, but cannot measure local NVFP4 latency, long decode stability, or a 130K-context overflow.
+
+### Rehearse a 130K window with GLM-5.3-Flash on OpenCode Go
+
+No context-limiting extension is needed. Pi's `models.json` can override the built-in Go model's advertised window for **both** a parent and children using the same Pi agent directory. Use an isolated profile so the rehearsal does not change your normal models:
+
+```sh
+export PI_CODING_AGENT_DIR="$(mktemp -d)"
+cat > "$PI_CODING_AGENT_DIR/models.json" <<'JSON'
+{"providers":{"opencode-go":{"modelOverrides":{"glm-5.3-flash":{"contextWindow":130000,"maxTokens":16384}}}}}
+JSON
+export OPENCODE_API_KEY="$OPENCODE_GO_API_KEY"
+pi --list-models glm-5.3-flash  # opencode-go row: 130K context, 16.4K output
+```
+
+From the repository, run Pi with `--provider opencode-go --model glm-5.3-flash --no-extensions --extension "$PWD/index.ts" --no-context-files --no-session --mode json` and save the JSON event stream. Give the parent a broad repo question and authorize a **fresh scout** with the absolute repo cwd, then repeat the same question in a fresh direct-only session (`--no-extensions`, without this extension). For a controlled comparison, give the delegated parent `--no-builtin-tools --tools subagents_enable,subagent,bg_wait,grep` and the direct parent `--tools read,grep,find,ls`; allow the delegated parent a **file-scoped grep** to verify the scout's main citation and its exact line number. Check that the parent did not run bulk searches, the scout reached a completed receipt, and the cited line actually contains the claimed code. Compare the peak parent prompt per assistant response in each JSON stream:
+
+```sh
+jq -s '[.[] | select(.type=="message_end" and .message.role=="assistant") | .message.usage | .input + .cacheRead + .cacheWrite] | max' delegated.jsonl
+```
+
+The same expression applies to `direct.jsonl`. Also compare parent tool-result sizes, run count, and the child receipt's `totalTokens`/`windowPeak` in its async `status.json`. On one read-only model-resolution task in this orb, parent peak prompt was **8,999 tokens delegated vs 11,934 direct**; child `windowPeak` was **10,542**. A follow-up with citation verification peaked at **22,008 parent tokens** after GLM omitted the required `agent` field and fetched a long tool guide before retrying. These are variable single-run measurements, not an efficiency guarantee: children have their own context and total work can increase. The original scout also cited the right code at the wrong line; verify citations rather than trusting a handoff blindly. This setting controls Pi's context accounting and compaction threshold (default reserve 16,384, so compaction starts above about 113,616 tokens); it **does not cap the Go server's actual 1M window** or prove the 130K boundary was exercised. Test that boundary and your NVFP4 deployment on the local vLLM endpoint separately.
+
 ## Setting defaults and overrides
 
 In `~/.pi/agent/settings.json` (user) or the project config settings file (`.pi/settings.json` in standard Pi; project wins):

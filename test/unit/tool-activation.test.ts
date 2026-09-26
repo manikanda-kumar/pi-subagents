@@ -104,6 +104,8 @@ describe("subagent tool activation", () => {
 		const loader = runtime.tools.get("subagents_enable");
 		assert.ok(loader);
 		assert.match(loader.description ?? "", /current request|applicable .*instructions/i);
+		assert.match(loader.description ?? "", /enable before broad parent searches/);
+		assert.match(loader.promptSnippet ?? "", /send the first broad search to scout.*instead of repeating its searches in the parent/);
 		assert.deepEqual(loader.parameters, { type: "object", properties: {}, additionalProperties: false });
 
 		const result = await loader.execute?.("enable", {}, new AbortController().signal, undefined, runtime.context);

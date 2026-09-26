@@ -52,7 +52,7 @@ test("native Pi exposes the full subagent schema on the request immediately afte
 				const tools = getCurrentTools(context.messages);
 				const systemPrompt = getCurrentSystemPrompt(context.messages);
 				assert.match(systemPrompt, /pi-subagents is installed/i);
-				assert.match(systemPrompt, /complexity alone is not authorization/i);
+				assert.match(systemPrompt, /never complexity alone/i);
 				captured.push(serializedCharacters(tools));
 				const loader = tools.find((tool) => tool.name === "subagents_enable");
 				const wait = tools.find((tool) => tool.name === "bg_wait");

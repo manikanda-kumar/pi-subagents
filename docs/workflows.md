@@ -12,6 +12,14 @@ clarify → scout → worker → fresh reviewers → worker
 
 Packaged `worker` defaults to fresh context so implementation starts from its assigned brief instead of the parent's unfinished conversation. Packaged `oracle` and `advisor` default to forked context; if the parent has no persisted session file or current leaf yet, that implicit default falls back to `fresh`. Explicit `context`, `context: "profile"`, and global `defaultSubagentContext` still override these profile defaults.
 
+When you want the **parent context to stay lean during repository exploration**, authorize that preference in the request or in Pi's user/project `AGENTS.md`, for example:
+
+```text
+For multi-file repository exploration, delegate the first broad search to scout. Pass the absolute repository cwd and a focused question. Use its short file/line-cited handoff; do not repeat its bulk search in the parent. Keep direct single-file lookups direct.
+```
+
+An explicit `cwd` on `subagent({ agent: "scout", cwd: "/absolute/repo", task: "Map the named flow; return only entry points, file/line references, and open questions." })` overrides the parent Pi cwd; otherwise the child starts from the parent's resolved cwd. `workflowScript` and `runs.run` also accept cwd. If Pi starts in `/` or home, start it from the project or supply that absolute repo cwd before asking for a scout—neither the model nor an unbounded filesystem scan can infer your intended repository safely. The scout prompt treats the launch cwd as its default search boundary and reports a missing repo instead of scanning `/` or home. This is guidance, not a filesystem sandbox: explicitly named paths outside the cwd remain accessible to ordinary child tools.
+
 Child-safety boundaries are enforced at runtime:
 
 - Child sessions do not receive the bundled `pi-subagents` skill.

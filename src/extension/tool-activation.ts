@@ -152,8 +152,8 @@ export function registerSubagentToolActivation(
 	const loader: ToolDefinition<typeof parameters, ActivationDetails> = {
 		name: LOADER_NAME,
 		label: "Enable Subagents",
-		description: "Enable pi-subagents delegation and management tools without launching work. Call when delegation is authorized by the current request or applicable user/project instructions, or when managing existing runs. Direct execution is the default; complexity alone never authorizes delegation. Full tools are available on the next model request.",
-		promptSnippet: "pi-subagents is installed. For authorized specialist, independent-review, or parallel work, call subagents_enable, then subagent. Authorization must come from the current request or applicable instructions; complexity alone is not authorization.",
+		description: "Enable pi-subagents delegation and management tools without launching work. Call when delegation is authorized by the current request or applicable instructions, or to manage existing runs. For delegated repo exploration, enable before broad parent searches so a scout can return bounded, cited context. Direct execution is the default; complexity alone never authorizes delegation. Full tools are available on the next model request.",
+		promptSnippet: "pi-subagents is installed. For authorized specialist, review, parallel, or repo-exploration work, call subagents_enable, then subagent. When exploration was delegated, send the first broad search to scout and use its concise handoff instead of repeating its searches in the parent. Authorization comes from the request or applicable instructions, never complexity alone.",
 		parameters,
 		async execute() {
 			if (!pi.getAllTools().some((tool) => tool.name === SUBAGENT_NAME)) return {
